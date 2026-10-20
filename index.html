@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#111418">
+<title>ビンゴ抽選</title>
+<style>
+  :root {
+    --bg: #111418;
+    --panel: #1b2027;
+    --line: #2a313a;
+    --text: #f2f4f7;
+    --muted: #8b95a3;
+    --accent: #ffb020;
+    --accent-ink: #1a1200;
+    --hit: #2f7cf6;
+    --ok: #2ecc71;
+    --ng: #ff5a5a;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation; overflow: hidden; }
+
+  .app { height: 100dvh; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: 16px; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
+  @media (orientation: portrait) {
+    .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1.3fr) minmax(0, 1fr); }
+  }
+
+  .main { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+  .topbar { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 15px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.ok { background: var(--ok); } .dot.ng { background: var(--ng); }
+  .topbar .spacer { flex: 1; }
+  .topbar label { white-space: nowrap; }
+  .icon-btn { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 8px 14px; font-size: 15px; }
+
+  .display { flex: 1; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 20px;
+    display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+  .number { font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1;
+    font-size: min(42vh, 30vw); letter-spacing: -0.03em; }
+  @media (orientation: portrait) { .number { font-size: min(24vh, 46vw); } }
+  .number.empty { color: var(--muted); font-size: min(10vh, 8vw); font-weight: 600; letter-spacing: 0; }
+  .number.pop { animation: pop .18s ease-out; }
+  @keyframes pop { from { transform: scale(.82); opacity: .4; } to { transform: scale(1); opacity: 1; } }
+  .remain { position: absolute; left: 16px; bottom: 12px; color: var(--muted); font-size: 15px; }
+  .pstate { position: absolute; right: 16px; bottom: 12px; font-size: 15px; color: var(--muted); }
+  .pstate.ng { color: var(--ng); }
+
+  .draw { height: 22%; min-height: 84px; border: 0; border-radius: 20px; background: var(--accent);
+    color: var(--accent-ink); font-size: clamp(28px, 5vh, 48px); font-weight: 800; }
+  .draw:active { filter: brightness(.88); }
+  .draw:disabled { background: var(--line); color: var(--muted); }
+
+  .actions { display: flex; gap: 10px; }
+  .actions button { flex: 1; }
+
+  .failed { display: none; background: #3a1717; border: 1px solid var(--ng); color: #ffd6d6;
+    border-radius: 12px; padding: 10px 14px; align-items: center; gap: 10px; font-size: 15px; }
+  .failed.show { display: flex; }
+  .failed span { flex: 1; }
+  .failed button { background: var(--ng); color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; font-size: 15px; }
+
+  .side { background: var(--panel); border: 1px solid var(--line); border-radius: 20px; padding: 14px;
+    display: flex; flex-direction: column; min-height: 0; }
+  .side h2 { margin: 0 0 10px; font-size: 15px; color: var(--muted); font-weight: 600;
+    display: flex; justify-content: space-between; }
+  .board { flex: 1; min-height: 0; display: grid; gap: 4px; align-content: start; overflow: auto;
+    grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); }
+  .cell { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; border-radius: 8px;
+    background: var(--bg); color: #5d6774; font-weight: 700; font-size: 17px; font-variant-numeric: tabular-nums; }
+  .cell.hit { background: var(--hit); color: #fff; }
+  .cell.last { background: var(--accent); color: var(--accent-ink); }
+
+  dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 16px;
+    padding: 20px; width: min(420px, calc(100vw - 32px)); }
+  dialog::backdrop { background: rgba(0,0,0,.6); }
+  dialog h3 { margin: 0 0 14px; }
+  .field { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 17px; }
+  .field input[type=number] { width: 110px; font-size: 20px; padding: 8px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  .note { color: var(--muted); font-size: 14px; margin: 4px 0 14px; }
+  .dlg-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .danger { background: transparent; color: var(--ng); border: 1px solid var(--ng); }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 700; }
+
+  /* 席ごとに色を変えて、2台を取り違えないようにする */
+  body.seat-camera { --accent: #4aa3ff; --accent-ink: #001a33; --hit: #8a5cf6; }
+  .seat { background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 17px;
+    border-radius: 10px; padding: 6px 12px; white-space: nowrap; }
+
+  .chooser { position: fixed; inset: 0; background: var(--bg); display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 20px; padding: 24px; }
+  .chooser.show { display: flex; }
+  .chooser h1 { margin: 0; font-size: 24px; color: var(--muted); font-weight: 600; }
+  .chooser a { width: min(480px, 100%); padding: 32px; border-radius: 20px; text-align: center;
+    font-size: 36px; font-weight: 800; text-decoration: none; }
+  .chooser .parent { background: #ffb020; color: #1a1200; }
+  .chooser .camera { background: #4aa3ff; color: #001a33; }
+  .chooser p { color: var(--muted); font-size: 15px; margin: 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="main">
+    <div class="topbar">
+      <span class="seat" id="seat"></span>
+      <span class="dot" id="pdot"></span><span id="ptext">プリンター確認中…</span>
+      <span class="spacer"></span>
+      <label style="display:flex;align-items:center;gap:6px"><input type="checkbox" id="printOn" checked> 印刷する</label>
+      <button class="icon-btn" id="openSettings">設定</button>
+    </div>
+    <div class="display">
+      <div class="number empty" id="number">タップで抽選</div>
+      <div class="remain" id="remain"></div>
+      <div class="pstate" id="pstate"></div>
+    </div>
+    <div class="failed" id="failed"><span id="failedText"></span><button id="retryFailed">まとめて再印刷</button></div>
+    <button class="draw" id="draw">次の番号</button>
+    <div class="actions">
+      <button class="icon-btn" id="reprint">直前の番号を再印刷</button>
+      <button class="icon-btn" id="undo">直前の抽選を取り消す</button>
+    </div>
+  </section>
+
+  <aside class="side">
+    <h2><span>出た番号</span><span id="drawnCount"></span></h2>
+    <div class="board" id="board"></div>
+  </aside>
+</div>
+
+<dialog id="settings">
+  <h3>設定</h3>
+  <div class="field">範囲 <input type="number" id="min" inputmode="numeric"> 〜 <input type="number" id="max" inputmode="numeric"></div>
+  <p class="note" id="rangeNote">範囲を変えるとリセットされます。</p>
+  <div class="dlg-actions">
+    <button class="icon-btn danger" id="reset">リセット</button>
+    <button class="icon-btn" id="closeSettings">閉じる</button>
+    <button class="icon-btn primary" id="saveSettings">保存</button>
+  </div>
+</dialog>
+
+<div class="chooser" id="chooser">
+  <h1>この端末の席を選んでください</h1>
+  <a class="parent" href="/parent">保護者席</a>
+  <a class="camera" href="/camera">カメラ席</a>
+  <p>開いた画面を「ホーム画面に追加」しておくと、次からその席で開きます。</p>
+</div>
+
+<script>
+(() => {
+  // 席は URL で決める (/parent, /camera)。抽選の状態も席ごとに別々に保存する
+  const SEATS = { parent: "保護者席", camera: "カメラ席" };
+  const SEAT = location.pathname.replace(/^\/+|\/+$/g, "");
+  if (!SEATS[SEAT]) { document.getElementById("chooser").classList.add("show"); return; }
+  document.body.classList.add("seat-" + SEAT);
+  document.title = `ビンゴ抽選（${SEATS[SEAT]}）`;
+  document.getElementById("seat").textContent = SEATS[SEAT];
+
+  const KEY = `bingo-state-v1-${SEAT}`;
+  const $ = (id) => document.getElementById(id);
+
+  // 状態は端末に保存し、リロードや画面ロックで消えないようにする
+  let state = load();
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.drawn)) return { printOn: true, failed: [], ...s };
+    } catch (e) {}
+    return { min: 1, max: 75, drawn: [], failed: [], printOn: true };
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+  function remaining() {
+    const used = new Set(state.drawn);
+    const r = [];
+    for (let n = state.min; n <= state.max; n++) if (!used.has(n)) r.push(n);
+    return r;
+  }
+
+  // 偏りのない乱数 (Math.random ではなく crypto を使う)
+  function randomIndex(n) {
+    const buf = new Uint32Array(1);
+    const limit = Math.floor(0x100000000 / n) * n;
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % n;
+  }
+
+  // ---- 描画 ----
+  const numberEl = $("number");
+  const cells = new Map();
+  function buildBoard() {
+    const board = $("board");
+    board.textContent = "";
+    cells.clear();
+    for (let n = state.min; n <= state.max; n++) {
+      const c = document.createElement("div");
+      c.className = "cell";
+      c.textContent = n;
+      board.appendChild(c);
+      cells.set(n, c);
+    }
+  }
+  function render(animate) {
+    const last = state.drawn[state.drawn.length - 1];
+    if (last === undefined) {
+      numberEl.textContent = "タップで抽選";
+      numberEl.className = "number empty";
+    } else {
+      numberEl.textContent = last;
+      numberEl.className = "number";
+      if (animate) { void numberEl.offsetWidth; numberEl.classList.add("pop"); }
+    }
+    const used = new Set(state.drawn);
+    for (const [n, c] of cells) c.className = "cell" + (n === last ? " last" : used.has(n) ? " hit" : "");
+    const total = state.max - state.min + 1;
+    $("remain").textContent = `残り ${total - state.drawn.length} / ${total}`;
+    $("drawnCount").textContent = `${state.drawn.length} 個`;
+    $("draw").disabled = state.drawn.length >= total;
+    $("draw").textContent = state.drawn.length >= total ? "全部出ました" : "次の番号";
+    $("printOn").checked = state.printOn;
+    const f = $("failed");
+    f.classList.toggle("show", state.failed.length > 0);
+    $("failedText").textContent = `未印刷: ${state.failed.join(", ")}`;
+  }
+
+  // ---- 印刷 ----
+  // 画面表示を先に済ませ、印刷は待たずに裏で送る
+  function print(n) {
+    if (!state.printOn) return;
+    const ps = $("pstate");
+    ps.className = "pstate"; ps.textContent = `${n} を印刷中…`;
+    fetch("/print", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ number: n, seat: SEAT }), keepalive: true,
+    }).then(r => r.json().then(j => { if (!r.ok || !j.ok) throw new Error(j.error || r.status); }))
+      .then(() => {
+        state.failed = state.failed.filter(x => x !== n); save(); render(false);
+        if (ps.textContent.startsWith(`${n} `)) ps.textContent = `${n} 印刷済み`;
+        setPrinter(true);
+      })
+      .catch(err => {
+        if (!state.failed.includes(n)) state.failed.push(n);
+        save(); render(false);
+        ps.className = "pstate ng"; ps.textContent = `${n} 印刷失敗`;
+        setPrinter(false, String(err.message || err));
+      });
+  }
+
+  // ---- 操作 ----
+  let lastTap = 0;
+  function draw() {
+    const now = performance.now();
+    if (now - lastTap < 200) return; // 誤ダブルタップ防止
+    lastTap = now;
+    const r = remaining();
+    if (!r.length) return;
+    const n = r[randomIndex(r.length)];
+    state.drawn.push(n);
+    save();
+    render(true);
+    print(n);
+  }
+
+  // click より早く反応させるため pointerdown で拾う
+  $("draw").addEventListener("pointerdown", (e) => { e.preventDefault(); draw(); });
+  document.addEventListener("keydown", (e) => {
+    if ($("settings").open) return;
+    // スペース / Enter / → / PageDown (プレゼン用リモコン) で抽選
+    if ([" ", "Enter", "ArrowRight", "PageDown"].includes(e.key)) { e.preventDefault(); draw(); }
+  });
+
+  $("reprint").addEventListener("click", () => {
+    const last = state.drawn[state.drawn.length - 1];
+    if (last !== undefined) print(last);
+  });
+  $("undo").addEventListener("click", () => {
+    const last = state.drawn[state.drawn.length - 1];
+    if (last === undefined) return;
+    if (!confirm(`${last} の抽選を取り消しますか？\n（印刷済みの紙は回収してください）`)) return;
+    state.drawn.pop();
+    state.failed = state.failed.filter(x => x !== last);
+    save(); render(false);
+  });
+  $("retryFailed").addEventListener("click", () => { for (const n of [...state.failed]) print(n); });
+  $("printOn").addEventListener("change", (e) => { state.printOn = e.target.checked; save(); });
+
+  // ---- 設定 ----
+  const dlg = $("settings");
+  $("openSettings").addEventListener("click", () => {
+    $("min").value = state.min; $("max").value = state.max;
+    dlg.showModal();
+  });
+  $("closeSettings").addEventListener("click", () => dlg.close());
+  $("saveSettings").addEventListener("click", () => {
+    const min = parseInt($("min").value, 10), max = parseInt($("max").value, 10);
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 0 || max < min || max - min > 9998) {
+      alert("範囲が正しくありません（0以上、最大9999個まで）"); return;
+    }
+    if (min === state.min && max === state.max) { dlg.close(); return; }
+    if (state.drawn.length && !confirm("範囲を変えると、出た番号がリセットされます。よろしいですか？")) return;
+    state = { ...state, min, max, drawn: [], failed: [] };
+    save(); buildBoard(); render(false); dlg.close();
+  });
+  $("reset").addEventListener("click", () => {
+    if (!confirm("出た番号をすべて消して最初からやり直しますか？")) return;
+    state.drawn = []; state.failed = [];
+    $("pstate").textContent = "";
+    save(); render(false); dlg.close();
+  });
+
+  // ---- プリンター状態 ----
+  function setPrinter(ok, msg) {
+    $("pdot").className = "dot " + (ok ? "ok" : "ng");
+    $("ptext").textContent = ok ? "プリンター接続OK" : (msg === "サーバー未接続" ? "サーバーに届きません" : "プリンターに届きません");
+    $("ptext").title = msg || "";
+  }
+  function checkPrinter() {
+    fetch("/status", { cache: "no-store" })
+      .then(r => r.json()).then(j => setPrinter(j.ok, j.error))
+      .catch(() => setPrinter(false, "サーバー未接続"));
+  }
+  checkPrinter();
+  setInterval(checkPrinter, 15000);
+
+  buildBoard();
+  render(false);
+})();
+</script>
+</body>
+</html>

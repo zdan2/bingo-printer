@@ -1,0 +1,4 @@
+# Wi-Fi「BINGO」のパスワード。公開しない
+wifi_password.txt
+__pycache__/
+*.pyc
